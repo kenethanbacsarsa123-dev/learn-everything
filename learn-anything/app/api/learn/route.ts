@@ -46,7 +46,12 @@ async function generateStudyAids(topic: string) {
     throw new Error("No response from AI");
   }
 
+  try {
   return JSON.parse(raw);
+} catch {
+  console.error("RAW AI RESPONSE:", raw);
+  throw new Error("Invalid JSON from AI");
+}
 }
 
 export async function POST(req: Request) {
