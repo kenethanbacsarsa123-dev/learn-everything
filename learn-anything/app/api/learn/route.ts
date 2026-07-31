@@ -52,9 +52,7 @@ async function generateStudyAids(topic: string) {
 export async function POST(req: Request) {
   try {
     const { topic } = await req.json();
-
     const result = await generateStudyAids(topic);
-
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json(
