@@ -1,81 +1,59 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
 const SYSTEM_PROMPT = `
-You are a helpful study assistant.
+You are a helpful AI that generates structured study aids.
 
-Return ONLY JSON in this format:
+Return ONLY valid JSON in this format:
 
 {
-  "summary": "short explanation",
-  "keyPoints": ["point1", "point2"],
-  "quiz": [
-    {
-      "question": "question here",
-      "choices": ["A", "B", "C", "D"],
-      "answer": "correct answer"
-    }
-  ]
+  "summary": "string",
+  "mindmap": ["string"],
+  "timeline": [{"year": "string", "event": "string"}],
+  "flashcards": [{"question": "string", "answer": "string"}],
+  "quiz": [{"question": "string", "options": ["string"], "answer": "string"}]
 }
 `;
 
 async function generateStudyAids(topic: string) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("Missing GROQ_API_KEY");
-  }
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-model: "llama3-70b-8192",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Topic: ${topic}` }
-      ],
-      temperature: 0.7
-    })
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Topic: ${topic}` }
+    ],
+    temperature: 0.7,
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Groq error: ${text}`);
-  }
-
-  const data = await res.json();
-
-  let raw = data?.choices?.[0]?.message?.content;
-
-  if (!raw) {
-    throw new Error("No AI response");
-  }
-
-  // 🔥 CLEAN RESPONSE (important)
-  raw = raw
-    .replace(/```json/g, "")
-    .replace(/```/g, "")
-    .trim();
-
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("RAW:", raw);
-    throw new Error("Invalid JSON from AI");
-  }
+  const raw = response.choices[0].message.content;
+  return raw;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { topic } = await req.json();
 
-    const result = await generateStudyAids(topic);
+    const raw = await generateStudyAids(topic);
 
-    return NextResponse.json(result);
+    let parsed;
+
+    try {
+      parsed = JSON.parse(raw || "{}");
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON from AI", raw },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(parsed);
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || "Something went wrong" },
       { status: 500 }
     );
   }
